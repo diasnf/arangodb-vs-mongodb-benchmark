@@ -110,6 +110,12 @@ ele, derruba os containers, faz o mesmo para o ArangoDB, e termina gerando
 `results/<mongo|arango>-<load|query>-summary.json`, caso você queira analisar os números
 com mais calma.
 
+O container e o volume do banco sempre são derrubados ao final — mesmo se o k6 falhar um
+threshold ou o script for interrompido no meio — e toda execução começa com uma limpeza
+defensiva do que sobrou de uma rodada anterior. Isso evita reaproveitar sem querer um banco
+que já tem dados de um teste passado (o dataset é sempre determinístico, então inserir ele
+duas vezes por cima bate no índice único de `_id_empresa + codigo`).
+
 ### Rodando só um banco
 
 ```bash

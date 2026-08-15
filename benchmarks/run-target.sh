@@ -207,6 +207,22 @@ if [[ "${SKIP_DOCKER:-0}" != "1" ]] && ! docker info > /dev/null 2>&1; then
   fi
 fi
 
+# Garante que o container/volume do banco é sempre derrubado ao sair — mesmo se o k6
+# falhar um threshold (sai com exit code != 0) ou o script for interrompido (Ctrl-C).
+# Sem isso, um erro no meio do teste deixava o volume com dados de uma rodada anterior,
+# e a rodada seguinte tentava inserir o mesmo dataset por cima -> duplicate key error.
+cleanup() {
+  local exit_code=$?
+  if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
+    log "derrubando docker compose (limpeza automática)..."
+    (cd "$API_DIR" && "${DOCKER_CMD[@]}" compose down -v --remove-orphans) || true
+  fi
+  exit "$exit_code"
+}
+if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
+  trap cleanup EXIT
+fi
+
 if [[ "$TARGET" == "arango" && "${SKIP_DOCKER:-0}" != "1" && "${SKIP_PAGE_CHECK:-0}" != "1" ]]; then
   PAGESIZE="$(getconf PAGESIZE)"
   if [[ "$PAGESIZE" != "4096" ]]; then
@@ -232,6 +248,10 @@ else
 fi
 
 if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
+  # Limpeza defensiva: garante volume vazio mesmo se uma execução anterior tiver
+  # quebrado antes de chegar na limpeza automática (proteção contra duplicate key).
+  (cd "$API_DIR" && "${DOCKER_CMD[@]}" compose down -v --remove-orphans) > /dev/null 2>&1 || true
+
   log "subindo docker compose ($API_DIR)..."
   (cd "$API_DIR" && "${DOCKER_CMD[@]}" compose up --build -d)
 
@@ -297,9 +317,5 @@ log "rodando teste de consulta em concorrência (query-concurrency-test.js)..."
   --summary-export="$RESULTS_DIR/$TARGET-query-summary.json" \
   2>&1 | tee "$RESULTS_DIR/$TARGET-query.log"
 
-if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
-  log "derrubando docker compose..."
-  (cd "$API_DIR" && "${DOCKER_CMD[@]}" compose down -v)
-fi
-
 log "concluído. Resultados em $RESULTS_DIR/$TARGET-{load,query}-summary.json"
+# docker compose down -v roda automaticamente aqui via trap (ver cleanup() acima).
