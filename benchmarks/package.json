@@ -1,0 +1,15 @@
+{
+  "name": "benchmarks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node seed/generate.js",
+    "seed:mongo": "node seed/seed.mongo.js",
+    "seed:arango": "node seed/seed.arango.js"
+  },
+  "dependencies": {
+    "arangojs": "^10.3.1",
+    "mongodb": "^7.5.0"
+  }
+}

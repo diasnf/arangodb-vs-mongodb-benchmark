@@ -1,0 +1,7 @@
+node_modules/
+dist/
+results/*.json
+results/*.log
+benchmarks/seed/dataset.jsonl
+benchmarks/seed/dataset-info.json
+.env

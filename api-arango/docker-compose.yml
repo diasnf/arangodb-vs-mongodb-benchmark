@@ -1,0 +1,44 @@
+services:
+  arangodb:
+    image: arangodb:3.12
+    container_name: bench-arangodb
+    command: ["arangod", "--rocksdb.block-cache-size=268435456", "--rocksdb.total-write-buffer-size=134217728"]
+    environment:
+      ARANGO_ROOT_PASSWORD: benchmark
+    ports:
+      - "8529:8529"
+    volumes:
+      - arango-data:/var/lib/arangodb3
+    healthcheck:
+      test: ["CMD", "arangosh", "--server.password", "benchmark", "--javascript.execute-string", "db._version()"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+
+  api-arango:
+    build: .
+    container_name: bench-api-arango
+    environment:
+      PORT: 3000
+      ARANGO_URL: http://arangodb:8529
+      ARANGO_DB: benchmark
+      ARANGO_USER: root
+      ARANGO_PASSWORD: benchmark
+    ports:
+      - "3000:3000"
+    depends_on:
+      arangodb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+volumes:
+  arango-data:
