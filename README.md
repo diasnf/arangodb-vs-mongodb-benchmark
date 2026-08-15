@@ -136,6 +136,22 @@ flags funcionam em `run-all.sh`, que repassa pros dois alvos.
 ./run-target.sh arango --api-port 3001
 ```
 
+Quando os dois bancos precisam de parâmetros diferentes no mesmo `run-all.sh`, separe as
+listas com um `--` literal: tudo antes vale só pro mongo, tudo depois só pro arango. Sem
+`--`, a mesma lista de flags vale pros dois (comportamento padrão).
+
+```bash
+# mongo local na porta 3000 com 100 VUs; arango numa outra máquina já rodando, 40 VUs
+./run-all.sh --api-port 3000 --query-vus 100 -- --skip-docker --base-url http://outra-maquina:3000 --query-vus 40
+```
+
+Exceção: `--count`/`--seed` não fazem sentido diferentes por alvo — o dataset
+(`seed/dataset.jsonl`) é um só, compartilhado de propósito pelos dois bancos, porque é isso
+que garante que a comparação é justa (mesmos dados nos dois lados). Quem gera o arquivo é o
+primeiro alvo a rodar (o mongo); um `--count` diferente depois do `--` só teria efeito com
+`--force-regen` junto, e nesse caso o mongo já teria rodado contra o dataset anterior — ou
+seja, normalmente não é o que você quer.
+
 | Flag | Default | Efeito |
 |---|---|---|
 | `--count` | 20000 | Quantidade de notas no dataset gerado (só é usado se `seed/dataset.jsonl` ainda não existir — use `--force-regen` pra regenerar com um valor novo) |
