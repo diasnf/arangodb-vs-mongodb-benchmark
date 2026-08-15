@@ -196,6 +196,21 @@ partir desta máquina por fora da rede docker isolada (porta publicada manualmen
 ./run-target.sh arango --skip-docker --base-url http://<ip-remoto>:3000 --arango-url http://<ip-remoto>:8529
 ```
 
+### Limpando tudo
+
+O `run-target.sh` já derruba container/volume/rede sozinho ao final de cada rodada (e faz
+uma limpeza defensiva no início, então mesmo uma execução morta à força — `kill -9`, queda
+de energia — não deixa lixo pra próxima). Pra limpar manualmente sem rodar teste nenhum, ou
+pra recuperar de um estado bagunçado:
+
+```bash
+./clean.sh          # containers, volumes e redes das duas stacks (idempotente)
+./clean.sh --all    # + dataset gerado, summaries/logs de resultado, e o k6 baixado
+```
+
+`results/REPORT.md` nunca é apagado pelo `--all` — é o relatório final, não um artefato
+descartável.
+
 ## Os dois testes k6
 
 - **`load-test.js`** — carga mista de escrita e leitura (`POST /notas` + `GET
