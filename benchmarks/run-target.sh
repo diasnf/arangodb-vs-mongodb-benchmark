@@ -2,6 +2,12 @@
 # Automatiza o benchmark completo de UM alvo (mongo ou arango):
 # gera dataset (se preciso) -> sobe docker -> semeia -> roda k6 (carga + consulta) -> derruba docker.
 #
+# O banco (mongo/arangodb) não expõe porta no host — fica só na rede docker isolada
+# da própria stack (bench-mongo-net / bench-arango-net), então não conflita com um
+# Mongo/Arango que já esteja rodando na máquina. O seed roda de dentro do container
+# da API (via "docker compose exec"), que enxerga o banco pelo nome de serviço interno.
+# Só a API fica publicada no host (porta $API_PORT, default 3000), pra o k6 alcançar.
+#
 # Uso:
 #   ./run-target.sh mongo
 #   ./run-target.sh arango
@@ -10,8 +16,10 @@
 #   COUNT              Tamanho do dataset a gerar se benchmarks/seed/dataset.jsonl não existir (default 20000)
 #   SEED               Seed do gerador determinístico (default 42)
 #   FORCE_REGEN=1      Força regerar o dataset mesmo se já existir
-#   SKIP_DOCKER=1      Não gerencia docker compose localmente (assume API já rodando em BASE_URL)
-#   BASE_URL           URL da API (default http://localhost:3000)
+#   API_PORT           Porta do host publicada para a API (default 3000) — mude se já estiver em uso
+#   SKIP_DOCKER=1      Não gerencia docker compose localmente (assume API já acessível em BASE_URL,
+#                      e banco acessível via MONGO_URL/ARANGO_URL a partir desta máquina)
+#   BASE_URL           URL da API (default http://localhost:$API_PORT)
 #   SKIP_PAGE_CHECK=1  Pula a checagem de page size de 4KB (necessária pro ArangoDB rodar)
 #   LOAD_MAX_VUS, LOAD_RAMP_UP, LOAD_PLATEAU   Repassados ao load-test.js
 #   VUS, DURATION                              Repassados ao query-concurrency-test.js
@@ -33,7 +41,8 @@ mkdir -p "$RESULTS_DIR"
 
 COUNT="${COUNT:-20000}"
 SEED="${SEED:-42}"
-BASE_URL="${BASE_URL:-http://localhost:3000}"
+export API_PORT="${API_PORT:-3000}"
+BASE_URL="${BASE_URL:-http://localhost:$API_PORT}"
 QUERY_DATA_INICIO="${QUERY_DATA_INICIO:-2022-01-01T00:00:00.000Z}"
 QUERY_DATA_FIM="${QUERY_DATA_FIM:-2030-01-01T00:00:00.000Z}"
 
@@ -58,6 +67,11 @@ if [[ "$TARGET" == "arango" && "${SKIP_DOCKER:-0}" != "1" && "${SKIP_PAGE_CHECK:
 fi
 
 cd "$ROOT_DIR/benchmarks"
+
+if [[ ! -d node_modules ]]; then
+  log "instalando dependências do benchmarks/ (mongodb/arangojs, usadas no seed)..."
+  npm install --no-audit --no-fund --silent
+fi
 
 if [[ ! -f seed/dataset.jsonl || "${FORCE_REGEN:-0}" == "1" ]]; then
   log "gerando dataset (COUNT=$COUNT SEED=$SEED)..."
@@ -86,11 +100,29 @@ if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
 fi
 
 log "semeando banco..."
-if [[ "$TARGET" == "mongo" ]]; then
-  MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" MONGO_DB="${MONGO_DB:-benchmark}" node seed/seed.mongo.js
+if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
+  # O banco não é publicado no host (evita conflito com um Mongo/Arango já instalado
+  # na máquina) — o seed roda de dentro do container da API, na mesma rede docker
+  # isolada, falando com o banco pelo nome de serviço interno (mongo/arangodb).
+  if [[ "$TARGET" == "mongo" ]]; then
+    (cd "$API_DIR" && "${DOCKER_CMD[@]}" compose exec -T \
+      -e MONGO_URL="mongodb://mongo:27017" -e MONGO_DB="${MONGO_DB:-benchmark}" \
+      api-mongo node /benchmarks/seed/seed.mongo.js)
+  else
+    (cd "$API_DIR" && "${DOCKER_CMD[@]}" compose exec -T \
+      -e ARANGO_URL="http://arangodb:8529" -e ARANGO_DB="${ARANGO_DB:-benchmark}" \
+      -e ARANGO_USER="${ARANGO_USER:-root}" -e ARANGO_PASSWORD="${ARANGO_PASSWORD:-benchmark}" \
+      api-arango node /benchmarks/seed/seed.arango.js)
+  fi
 else
-  ARANGO_URL="${ARANGO_URL:-http://localhost:8529}" ARANGO_DB="${ARANGO_DB:-benchmark}" \
-    ARANGO_USER="${ARANGO_USER:-root}" ARANGO_PASSWORD="${ARANGO_PASSWORD:-benchmark}" node seed/seed.arango.js
+  # SKIP_DOCKER=1: você gerencia a conectividade — aponte MONGO_URL/ARANGO_URL para
+  # onde o banco estiver de fato alcançável a partir desta máquina.
+  if [[ "$TARGET" == "mongo" ]]; then
+    MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" MONGO_DB="${MONGO_DB:-benchmark}" node seed/seed.mongo.js
+  else
+    ARANGO_URL="${ARANGO_URL:-http://localhost:8529}" ARANGO_DB="${ARANGO_DB:-benchmark}" \
+      ARANGO_USER="${ARANGO_USER:-root}" ARANGO_PASSWORD="${ARANGO_PASSWORD:-benchmark}" node seed/seed.arango.js
+  fi
 fi
 
 log "rodando teste de carga (load-test.js)..."

@@ -5,10 +5,13 @@ services:
     command: ["arangod", "--rocksdb.block-cache-size=268435456", "--rocksdb.total-write-buffer-size=134217728"]
     environment:
       ARANGO_ROOT_PASSWORD: benchmark
-    ports:
-      - "8529:8529"
+    # Sem "ports": o ArangoDB só é alcançável dentro da rede bench-arango-net,
+    # pelo nome de serviço "arangodb". Evita conflito com um ArangoDB já rodando
+    # no host (porta 8529 em uso) e mantém a stack isolada de qualquer coisa fora dela.
     volumes:
       - arango-data:/var/lib/arangodb3
+    networks:
+      - bench-arango-net
     healthcheck:
       test: ["CMD", "arangosh", "--server.password", "benchmark", "--javascript.execute-string", "db._version()"]
       interval: 5s
@@ -30,7 +33,12 @@ services:
       ARANGO_USER: root
       ARANGO_PASSWORD: benchmark
     ports:
-      - "3000:3000"
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      # dá acesso aos scripts de seed de dentro da rede isolada, sem expor o banco no host
+      - ../benchmarks:/benchmarks:ro
+    networks:
+      - bench-arango-net
     depends_on:
       arangodb:
         condition: service_healthy
@@ -39,6 +47,10 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+
+networks:
+  bench-arango-net:
+    name: bench-arango-net
 
 volumes:
   arango-data:

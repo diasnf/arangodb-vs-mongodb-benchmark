@@ -50,6 +50,21 @@ Os dois bancos criam os mesmos dois índices, pensados pra cobrir a query princi
   período, ordena por data decrescente, projeção enxuta
 - `GET /notas/resumo?_id_empresa=&data_inicio=&data_fim=&agrupar=dia|vendedor` — agregação, de bônus
 
+### Isolamento de rede
+
+Cada stack sobe numa rede docker própria (`bench-mongo-net` / `bench-arango-net`) e o
+banco **não publica porta nenhuma no host** — só é alcançável de dentro dessa rede, pelo
+nome de serviço (`mongo` ou `arangodb`). Isso evita o problema mais comum de rodar isso numa
+máquina que já tem uso: `docker compose` reclamando que a porta 27017 (ou 8529) já está em
+uso por outro Mongo/Arango instalado por fora. Só a API fica exposta no host (porta 3000 por
+padrão, ajustável via `API_PORT`), que é o que o k6 realmente precisa alcançar.
+
+Uma consequência prática: como o banco não tem porta no host, o `seed` não roda mais direto
+do seu terminal contra `localhost` — ele roda de dentro do container da própria API (via
+`docker compose exec`), que já está na rede certa. Isso é feito automaticamente pelo
+`run-target.sh`; se você chamar os scripts de seed manualmente, lembre que eles vão precisar
+alcançar o banco de algum lugar dentro da rede docker, não do host.
+
 ### Limites de CPU e RAM
 
 Banco e API têm limites iguais nas duas stacks, pra manter a comparação justa:
@@ -121,10 +136,12 @@ node report.js
 ```
 
 Se a API já estiver rodando em outro lugar e você só quer disparar o k6 contra ela, sem
-gerenciar docker localmente:
+gerenciar docker localmente, use `SKIP_DOCKER=1` — nesse modo o script não sobe/derruba
+containers nem semeia via `docker compose exec`, então o banco precisa estar alcançável a
+partir desta máquina por fora da rede docker isolada (porta publicada manualmente, VPN, etc.):
 
 ```bash
-BASE_URL=http://<ip-remoto>:3000 SKIP_DOCKER=1 ./run-target.sh arango
+BASE_URL=http://<ip-remoto>:3000 ARANGO_URL=http://<ip-remoto>:8529 SKIP_DOCKER=1 ./run-target.sh arango
 ```
 
 ### Ajustando a escala do teste
@@ -136,6 +153,7 @@ Numa máquina dedicada só para o benchmark, vale subir esses valores:
 |---|---|---|
 | `COUNT` | 20000 | Quantidade de notas no dataset gerado |
 | `SEED` | 42 | Seed do gerador determinístico |
+| `API_PORT` | 3000 | Porta do host publicada para a API — mude se 3000 já estiver em uso |
 | `LOAD_MAX_VUS` / `LOAD_RAMP_UP` / `LOAD_PLATEAU` | 50 / 20s / 40s | Rampa do teste de carga |
 | `VUS` / `DURATION` | 50 / 30s | Concorrência do teste de consulta |
 | `QUERY_DATA_INICIO` / `QUERY_DATA_FIM` | cobre 2022–2030 | Janela de data usada nas leituras |

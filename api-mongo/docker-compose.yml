@@ -3,10 +3,13 @@ services:
     image: mongo:7
     container_name: bench-mongo
     command: ["mongod", "--wiredTigerCacheSizeGB", "0.5"]
-    ports:
-      - "27017:27017"
+    # Sem "ports": o Mongo só é alcançável dentro da rede bench-mongo-net, pelo
+    # nome de serviço "mongo". Evita conflito com um MongoDB já rodando no host
+    # (porta 27017 em uso) e mantém a stack isolada de qualquer coisa fora dela.
     volumes:
       - mongo-data:/data/db
+    networks:
+      - bench-mongo-net
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
@@ -26,7 +29,12 @@ services:
       MONGO_URL: mongodb://mongo:27017
       MONGO_DB: benchmark
     ports:
-      - "3000:3000"
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      # dá acesso aos scripts de seed de dentro da rede isolada, sem expor o banco no host
+      - ../benchmarks:/benchmarks:ro
+    networks:
+      - bench-mongo-net
     depends_on:
       mongo:
         condition: service_healthy
@@ -35,6 +43,10 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+
+networks:
+  bench-mongo-net:
+    name: bench-mongo-net
 
 volumes:
   mongo-data:
