@@ -51,7 +51,7 @@ if [[ "$TARGET" == "arango" && "${SKIP_DOCKER:-0}" != "1" && "${SKIP_PAGE_CHECK:
   PAGESIZE="$(getconf PAGESIZE)"
   if [[ "$PAGESIZE" != "4096" ]]; then
     echo "[$TARGET] ERRO: este host usa páginas de ${PAGESIZE} bytes; a imagem oficial do ArangoDB" >&2
-    echo "[$TARGET] trava (jemalloc segfault) em kernels sem páginas de 4096 bytes (ex: Raspberry Pi 5)." >&2
+    echo "[$TARGET] trava (jemalloc segfault) em kernels sem páginas de 4096 bytes (comum em alguns kernels ARM64)." >&2
     echo "[$TARGET] Rode este script em outra máquina, ou use SKIP_DOCKER=1 + BASE_URL apontando pra lá." >&2
     exit 1
   fi

@@ -17,7 +17,7 @@ import { EMPRESAS } from "../shared/constants.js";
 const BASE_URL = __ENV.BASE_URL || "http://localhost:3000";
 const DATA_INICIO = __ENV.QUERY_DATA_INICIO || "2022-01-01T00:00:00.000Z";
 const DATA_FIM = __ENV.QUERY_DATA_FIM || "2030-01-01T00:00:00.000Z";
-// Default conservador (pensado p/ hosts compartilhados de poucos recursos, ex. Raspberry Pi).
+// Default conservador (pensado p/ hosts compartilhados de poucos recursos).
 // Em uma máquina dedicada, suba via env: VUS=200 DURATION=2m
 const VUS = Number(__ENV.VUS || 50);
 const DURATION = __ENV.DURATION || "30s";
