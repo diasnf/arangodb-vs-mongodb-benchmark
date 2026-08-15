@@ -1,5 +1,6 @@
 node_modules/
 dist/
+benchmarks/.bin/
 results/*.json
 results/*.log
 benchmarks/seed/dataset.jsonl

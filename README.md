@@ -91,8 +91,10 @@ restrição de recursos, não descobrir qual banco aguenta mais RAM.
 
 ## Rodando tudo
 
-Pré-requisitos: Docker + Docker Compose, Node.js 20+, e o [k6](https://k6.io/) instalado
-(ou `docker run grafana/k6`).
+Pré-requisitos: Docker + Docker Compose e Node.js 20+. O [k6](https://k6.io/) não precisa
+estar instalado — se `run-target.sh` não encontrar `k6` no PATH, ele baixa o binário oficial
+(Linux amd64/arm64) para `benchmarks/.bin/k6` sozinho, sem precisar de root. Em outro
+SO/arquitetura, instale manualmente e garanta que `k6` esteja no PATH.
 
 A forma mais simples é deixar o script cuidar de tudo:
 
@@ -115,6 +117,34 @@ com mais calma.
 ./run-target.sh arango
 ```
 
+### Parametrizando o teste
+
+Tudo o que dá pra ajustar tem uma flag — `./run-target.sh --help` lista todas. As mesmas
+flags funcionam em `run-all.sh`, que repassa pros dois alvos.
+
+```bash
+# dataset maior, mais VUs, teste de consulta mais longo — numa máquina dedicada, por exemplo
+./run-target.sh mongo --count 200000 --load-vus 150 --query-vus 150 --query-duration 2m
+
+# porta 3000 já em uso na máquina? redireciona a API pra outra
+./run-target.sh arango --api-port 3001
+```
+
+| Flag | Default | Efeito |
+|---|---|---|
+| `--count` | 20000 | Quantidade de notas no dataset gerado (só é usado se `seed/dataset.jsonl` ainda não existir — use `--force-regen` pra regenerar com um valor novo) |
+| `--seed` | 42 | Seed do gerador determinístico |
+| `--api-port` | 3000 | Porta do host publicada para a API — mude se já estiver em uso |
+| `--load-vus` / `--load-ramp-up` / `--load-plateau` | 50 / 20s / 40s | Rampa do teste de carga |
+| `--query-vus` / `--query-duration` | 50 / 30s | Concorrência do teste de consulta |
+| `--data-inicio` / `--data-fim` | cobre 2022–2030 | Janela de data usada nas leituras |
+
+Os defaults são conservadores de propósito, pra rodar em qualquer máquina sem sufocar —
+suba esses valores numa máquina dedicada só pro benchmark. As variáveis de ambiente
+equivalentes (`COUNT`, `SEED`, `API_PORT`, `LOAD_MAX_VUS`, `LOAD_RAMP_UP`, `LOAD_PLATEAU`,
+`VUS`, `DURATION`, `QUERY_DATA_INICIO`, `QUERY_DATA_FIM`) também funcionam como default,
+caso prefira; uma flag na linha de comando sempre tem a palavra final.
+
 ### Rodando os dois bancos em máquinas diferentes
 
 Nada aqui obriga MongoDB e ArangoDB a rodarem na mesma máquina — na real, comparar em
@@ -136,27 +166,13 @@ node report.js
 ```
 
 Se a API já estiver rodando em outro lugar e você só quer disparar o k6 contra ela, sem
-gerenciar docker localmente, use `SKIP_DOCKER=1` — nesse modo o script não sobe/derruba
+gerenciar docker localmente, use `--skip-docker` — nesse modo o script não sobe/derruba
 containers nem semeia via `docker compose exec`, então o banco precisa estar alcançável a
 partir desta máquina por fora da rede docker isolada (porta publicada manualmente, VPN, etc.):
 
 ```bash
-BASE_URL=http://<ip-remoto>:3000 ARANGO_URL=http://<ip-remoto>:8529 SKIP_DOCKER=1 ./run-target.sh arango
+./run-target.sh arango --skip-docker --base-url http://<ip-remoto>:3000 --arango-url http://<ip-remoto>:8529
 ```
-
-### Ajustando a escala do teste
-
-Os defaults são conservadores de propósito, pra rodar em qualquer máquina sem sufocar.
-Numa máquina dedicada só para o benchmark, vale subir esses valores:
-
-| Variável | Default | Efeito |
-|---|---|---|
-| `COUNT` | 20000 | Quantidade de notas no dataset gerado |
-| `SEED` | 42 | Seed do gerador determinístico |
-| `API_PORT` | 3000 | Porta do host publicada para a API — mude se 3000 já estiver em uso |
-| `LOAD_MAX_VUS` / `LOAD_RAMP_UP` / `LOAD_PLATEAU` | 50 / 20s / 40s | Rampa do teste de carga |
-| `VUS` / `DURATION` | 50 / 30s | Concorrência do teste de consulta |
-| `QUERY_DATA_INICIO` / `QUERY_DATA_FIM` | cobre 2022–2030 | Janela de data usada nas leituras |
 
 ## Os dois testes k6
 
